@@ -1,50 +1,48 @@
-const venom = require("venom-bot");
-const express = require("express");
-const fs = require("fs");
+const venom = require('venom-bot');
+const fs = require('fs');
+const path = require('path');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const sessionName = 'session-name';
+const sessionPath = path.join(__dirname, 'tokens', sessionName);
 
-// Ruta para servir el QR en HTML
-app.get("/qr", (req, res) => {
-  res.sendFile(__dirname + "/qr.html");
-});
+// Asegurarse de que la carpeta de tokens exista
+fs.mkdirSync(sessionPath, { recursive: true });
 
 venom
-  .create({
-    session: "session-name",
-    multidevice: true,            // soporta multidispositivo
-    useChrome: true,              // fuerza a usar Chrome instalado
-    headless: true,
-    browserArgs: ["--no-sandbox", "--disable-setuid-sandbox"],
-    catchQR: (base64Qr, asciiQR) => {
-      // mostrar ascii en consola
-      console.log(asciiQR);
+  .create(
+    sessionName,
+    undefined,
+    undefined,
+    {
+      headless: true,
+      useChrome: true,
+      disableSpins: true,
+      logQR: false, // no imprimir QR en consola
+    }
+  )
+  .then(client => start(client))
+  .catch(err => console.error(err));
 
-      // guardar el QR en un HTML accesible
-      const html = `
-        <html>
-          <body style="text-align:center;font-family:sans-serif">
-            <h2>Escanea este QR con WhatsApp 📱</h2>
-            <img src="${base64Qr}" />
-          </body>
-        </html>
-      `;
-      fs.writeFileSync("qr.html", html);
-    },
-  })
-  .then((client) => start(client))
-  .catch((err) => console.error(err));
+// Guardar QR en PNG y HTML
+venom.onStateChange((state) => {
+  if (state === 'CONNECTED') {
+    console.log('Bot conectado');
+  }
+});
+
+venom.onQRCode((base64Qr, asciiQR, urlCode) => {
+  // Guardar PNG
+  const qrBuffer = Buffer.from(base64Qr, 'base64');
+  fs.writeFileSync(path.join(sessionPath, 'qr.png'), qrBuffer);
+
+  // Guardar HTML
+  const htmlContent = `<img src="data:image/png;base64,${base64Qr}" alt="QR Code">`;
+  fs.writeFileSync(path.join(sessionPath, 'qr.html'), htmlContent);
+
+  console.log('QR generado en PNG y HTML en la carpeta tokens/');
+});
 
 function start(client) {
-  client.onMessage((message) => {
-    if (message.body.toLowerCase() === "hola") {
-      client.sendText(message.from, "👋 Hola, soy tu bot con Venom!");
-    }
-  });
+  // Tu lógica del bot aquí
+  console.log('Bot listo para usar');
 }
-
-// 🚀 Levantar el servidor en Railway
-app.listen(PORT, () =>
-  console.log(`🌐 Servidor en http://localhost:${PORT}/qr`)
-);
