@@ -1,25 +1,46 @@
-const venom = require('venom-bot');
-const express = require('express');
-const app = express();
-const port = process.env.PORT || 3000;
+const venom = require("venom-bot");
+const express = require("express");
+const fs = require("fs");
 
-venom.create({
-    session: 'session-name',
-    multidevice: true,
-    useChrome: true,             // fuerza a usar Chrome instalado
-    headless: true,
-    browserArgs: ['--no-sandbox', '--disable-setuid-sandbox']
-})
-.then(client => start(client))
-.catch(err => console.log(err));
+const app = express();
+
+// Ruta para servir el QR
+app.get("/qr", (req, res) => {
+  res.sendFile(__dirname + "/qr.html");
+});
+
+venom
+  .create({
+    session: "session-name",
+    catchQR: (base64Qr, asciiQR) => {
+      // mostrar ascii en consola
+      console.log(asciiQR);
+
+      // guardar el QR como html básico
+      const html = `
+        <html>
+          <body>
+            <h2>Escanea este QR con WhatsApp</h2>
+            <img src="${base64Qr}" />
+          </body>
+        </html>
+      `;
+      fs.writeFileSync("qr.html", html);
+    },
+  })
+  .then((client) => start(client))
+  .catch((err) => console.error(err));
 
 function start(client) {
-    client.onMessage(msg => {
-        if(msg.body.toLowerCase() === 'hola') {
-            client.sendText(msg.from, '¡Hola! Soy tu bot en Railway 🤖');
-        }
-    });
+  client.onMessage((message) => {
+    if (message.body === "Hola") {
+      client.sendText(message.from, "👋 Hola, soy tu bot con Venom!");
+    }
+  });
 }
 
-app.get('/', (req, res) => res.send('Bot de WhatsApp corriendo 🚀'));
-app.listen(port, () => console.log(`Servidor activo en puerto ${port}`));
+// 🚀 Levantar el servidor en Railway
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () =>
+  console.log(`🌐 Servidor en http://localhost:${PORT}/qr`)
+);
