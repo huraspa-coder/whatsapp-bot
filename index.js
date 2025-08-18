@@ -5,7 +5,10 @@ const port = process.env.PORT || 3000;
 
 venom.create({
     session: 'session-name',
-    multidevice: true
+    multidevice: true,
+    useChrome: true,             // fuerza a usar Chrome instalado
+    headless: true,
+    browserArgs: ['--no-sandbox', '--disable-setuid-sandbox']
 })
 .then(client => start(client))
 .catch(err => console.log(err));
