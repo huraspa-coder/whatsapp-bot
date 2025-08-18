@@ -1,7 +1,7 @@
-# Usa Node.js 20 como base
+# Node 20 como base
 FROM node:20-slim
 
-# Instala librerías necesarias para Chromium
+# Librerías necesarias para Puppeteer / Venom
 RUN apt-get update && \
     apt-get install -y wget gnupg ca-certificates \
     fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 \
@@ -10,18 +10,23 @@ RUN apt-get update && \
     xdg-utils libgbm1 libpango1.0-0 libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
-# Crea carpeta de la app
+# Carpeta de trabajo
 WORKDIR /app
 
-# Copia archivos
-COPY package.json package-lock.json* ./
-COPY index.js ./
+# Copiar package.json y package-lock.json
+COPY package*.json ./
 
-# Instala dependencias
+# Instalar dependencias
 RUN npm install
 
-# Expone el puerto
+# Copiar código del bot
+COPY . .
+
+# Crear carpeta de tokens
+RUN mkdir -p /app/tokens/session-name
+
+# Exponer puerto (solo si usas Express)
 EXPOSE 3000
 
-# Comando para iniciar el bot
-CMD ["npm", "start"]
+# Arranque directo del bot
+CMD ["node", "index.js"]
