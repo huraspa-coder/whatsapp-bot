@@ -1,5 +1,5 @@
-# Usa Node.js 18 como base
-FROM node:18-slim
+# Usa Node.js 20 como base
+FROM node:20-slim
 
 # Instala librerías necesarias para Chromium
 RUN apt-get update && \
