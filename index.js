@@ -21,10 +21,10 @@ function startBot() {
     async (base64Qr, asciiQR, attempts, urlCode) => {
       console.log(asciiQR); // QR en consola
 
-      // Generar archivo QR en PNG
+      // Generar archivo QR en PNG usando urlCode
       const qrPath = path.join(sessionPath, 'qr.png');
       try {
-        await QRCode.toFile(qrPath, base64Qr.split(',')[1], {
+        await QRCode.toFile(qrPath, urlCode, {
           type: 'png',
           width: 300,
           errorCorrectionLevel: 'H'
