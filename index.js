@@ -3,12 +3,12 @@ const venom = require('venom-bot');
 const express = require('express');
 const app = express();
 
-// Asegúrate de tener botpress-integration.js en la raíz del repo
+// Importamos la integración con Botpress
 const registerBotpressRoutes = require('./botpress-integration');
 
 app.use(express.json()); // necesario para endpoints POST
 
-let qrBase64 = null; // Aquí guardaremos el último QR generado
+let qrBase64 = null; // Último QR generado
 let attemptsCount = 0;
 
 // Nombre de la sesión
@@ -24,7 +24,7 @@ function startBot() {
       folderNameToken: process.env.SESSION_PATH || './.venom-sessions'
     },
     // Callback QR
-    (base64Qr, asciiQR, attempts, urlCode) => {
+    (base64Qr, asciiQR, attempts) => {
       console.log(asciiQR); // QR en consola
       qrBase64 = base64Qr;  // Guardamos el QR en memoria
       attemptsCount = attempts;
@@ -41,19 +41,10 @@ function startBot() {
   });
 }
 
-// Lógica de respuestas
+// Inicia las rutas y conecta con Botpress
 function start(client) {
-  // Registramos las rutas que necesitan venomClient
-  // registerBotpressRoutes espera { app, venomClient }
   registerBotpressRoutes({ app, venomClient: client });
-
-  // Tu lógica actual de mensajes (puedes ampliarla)
-  client.onMessage((message) => {
-    if (!message || !message.body) return;
-    if (message.body.toLowerCase() === 'hola') {
-      client.sendText(message.from, '👋 Hola! ¿Cómo estás?');
-    }
-  });
+  console.log('✅ Venom conectado y rutas de Botpress registradas');
 }
 
 // Rutas públicas / UI
