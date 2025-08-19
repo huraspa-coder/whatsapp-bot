@@ -29,24 +29,22 @@ venom
   .then((client) => {
     venomClient = client;
     console.log("✅ Venom conectado");
+
+    // cambios: registrar onMessage en el cliente ya inicializado
+    venomClient.onMessage((message) => {
+      console.log("📩 Mensaje entrante de WhatsApp a Botpress:", message);
+
+      // cambios: si quieres enviar mensaje a Botpress, descomenta y configura URL
+      // fetch(process.env.BOTPRESS_INCOMING_URL, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ userId: message.from, text: message.body }),
+      // });
+    });
   })
   .catch((err) => {
     console.error("❌ Error al iniciar Venom:", err);
   });
-
-// ==========================
-// Escuchar mensajes entrantes de WhatsApp
-// ==========================
-venom.onMessage((message) => {
-  console.log("📩 Mensaje entrante de WhatsApp a Botpress:", message);
-
-  // cambios: si quieres enviar mensaje a Botpress, descomenta y configura URL
-  // fetch(process.env.BOTPRESS_INCOMING_URL, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify({ userId: message.from, text: message.body }),
-  // });
-});
 
 // ==========================
 // Endpoint POST para recibir mensajes de Botpress
