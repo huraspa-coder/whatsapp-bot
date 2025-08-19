@@ -1,16 +1,14 @@
 const venom = require('venom-bot');
-const fs = require('fs');
-const path = require('path');
-const QRCode = require('qrcode'); // para generar PNG
+const express = require('express');
+const app = express();
+
+let qrBase64 = null; // Aquí guardaremos el último QR generado
+let attemptsCount = 0;
 
 // Nombre de la sesión
 const sessionName = 'session-name';
-const sessionPath = path.join(__dirname, 'tokens', sessionName);
 
-// Crear carpeta de tokens si no existe
-fs.mkdirSync(sessionPath, { recursive: true });
-
-// Función principal para arrancar el bot
+// Arrancar el bot
 function startBot() {
   venom.create(
     {
@@ -18,21 +16,10 @@ function startBot() {
       multidevice: true
     },
     // Callback QR
-    async (base64Qr, asciiQR, attempts, urlCode) => {
+    (base64Qr, asciiQR, attempts, urlCode) => {
       console.log(asciiQR); // QR en consola
-
-      // Generar archivo QR en PNG usando urlCode
-      const qrPath = path.join(sessionPath, 'qr.png');
-      try {
-        await QRCode.toFile(qrPath, urlCode, {
-          type: 'png',
-          width: 300,
-          errorCorrectionLevel: 'H'
-        });
-        console.log(`✅ QR guardado en: ${qrPath}`);
-      } catch (err) {
-        console.error('❌ Error al guardar QR:', err);
-      }
+      qrBase64 = base64Qr;  // Guardamos el QR en memoria
+      attemptsCount = attempts;
     },
     // Callback status de sesión
     (statusSession, session) => {
@@ -42,7 +29,7 @@ function startBot() {
   )
   .then((client) => start(client))
   .catch((erro) => {
-    console.log(erro);
+    console.log('❌ Error Venom:', erro);
   });
 }
 
@@ -55,4 +42,36 @@ function start(client) {
   });
 }
 
+// 🚀 Servidor Express
+app.get('/', (req, res) => {
+  res.send('<h1>Servidor activo 🚀</h1><p>Visita <a href="/qr">/qr</a> para ver el código QR.</p>');
+});
+
+app.get('/qr', (req, res) => {
+  if (!qrBase64) {
+    return res.send('<h2>Aún no se ha generado el QR... intenta refrescar en unos segundos.</h2>');
+  }
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Escanea tu QR</title>
+    </head>
+    <body style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:sans-serif;">
+      <h2>Escanea este QR para iniciar sesión en WhatsApp</h2>
+      <img src="${qrBase64}" alt="QR Code" style="width:300px;height:300px;" />
+      <p>Intento: ${attemptsCount}</p>
+    </body>
+    </html>
+  `);
+});
+
+// Railway usa un puerto dinámico
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌍 Servidor corriendo en http://localhost:${PORT}`);
+});
+
+// Iniciar el bot
 startBot();
