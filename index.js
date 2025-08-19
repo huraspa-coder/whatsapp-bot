@@ -1,3 +1,4 @@
+// index.js
 const venom = require('venom-bot');
 const express = require('express');
 const app = express();
@@ -9,6 +10,7 @@ app.use(express.json()); // necesario para endpoints POST
 
 let qrBase64 = null; // Último QR generado
 let attemptsCount = 0;
+let venomClient; // NUEVO: guardamos el cliente Venom para usar en el POST
 
 // Nombre de la sesión
 const sessionName = 'session-name';
@@ -19,13 +21,16 @@ function startBot() {
     {
       session: sessionName,
       multidevice: true,
+      // Persistencia: carpeta donde venom guarda tokens/sesión
       folderNameToken: process.env.SESSION_PATH || './.venom-sessions'
     },
+    // Callback QR
     (base64Qr, asciiQR, attempts) => {
       console.log(asciiQR); // QR en consola
       qrBase64 = base64Qr;  // Guardamos el QR en memoria
       attemptsCount = attempts;
     },
+    // Callback status de sesión
     (statusSession, session) => {
       console.log('Status Session:', statusSession);
       console.log('Session name:', session);
@@ -39,27 +44,9 @@ function startBot() {
 
 // Inicia las rutas y conecta con Botpress
 function start(client) {
+  venomClient = client; // NUEVO: guardamos el cliente para el POST
   registerBotpressRoutes({ app, venomClient: client });
   console.log('✅ Venom conectado y rutas de Botpress registradas');
-
-  // --- NUEVO: endpoint POST para recibir mensajes desde Botpress ---
-  app.post('/botpress/response', async (req, res) => {
-    try {
-      const { userId, message } = req.body; // Botpress enviará userId y message
-      if (!userId || !message) {
-        return res.status(400).json({ error: 'Faltan userId o message' });
-      }
-
-      // Enviar mensaje a WhatsApp
-      await client.sendText(`${userId}@c.us`, message);
-
-      res.json({ status: 'ok', sentTo: userId, message });
-    } catch (err) {
-      console.error('❌ Error enviando mensaje a WhatsApp:', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-  // --- FIN NUEVO ---
 }
 
 // Rutas públicas / UI
@@ -85,6 +72,24 @@ app.get('/qr', (req, res) => {
     </body>
     </html>
   `);
+});
+
+// NUEVO: Endpoint para recibir mensajes desde Botpress
+app.post('/botpress/response', async (req, res) => {
+  try {
+    const { userId, message } = req.body;
+    if (!userId || !message) return res.status(400).send('Faltan datos');
+
+    if (venomClient) {
+      await venomClient.sendText(userId + '@c.us', message);
+      return res.status(200).send('Mensaje enviado');
+    } else {
+      return res.status(500).send('Cliente Venom no iniciado');
+    }
+  } catch (err) {
+    console.error('Error enviando mensaje:', err);
+    return res.status(500).send('Error interno');
+  }
 });
 
 // Puerto (Railway asume process.env.PORT)
