@@ -1,12 +1,20 @@
 {
   "name": "venom-bot-railway",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "description": "Bot de WhatsApp con Venom y integración Botpress",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-"dependencies": {
-  "venom-bot": "^5.1.0",
-  "express": "^4.18.2"
-}
+  "dependencies": {
+    "express": "^4.18.2",
+    "venom-bot": "^5.1.0",
+    "axios": "^1.6.0"
+  },
+  "resolutions": {
+    "puppeteer": "^24.9.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }
