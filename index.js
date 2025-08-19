@@ -1,6 +1,12 @@
+// index.js
 const venom = require('venom-bot');
 const express = require('express');
 const app = express();
+
+// Asegúrate de tener botpress-integration.js en la raíz del repo
+const registerBotpressRoutes = require('./botpress-integration');
+
+app.use(express.json()); // necesario para endpoints POST
 
 let qrBase64 = null; // Aquí guardaremos el último QR generado
 let attemptsCount = 0;
@@ -13,7 +19,9 @@ function startBot() {
   venom.create(
     {
       session: sessionName,
-      multidevice: true
+      multidevice: true,
+      // Persistencia: carpeta donde venom guarda tokens/sesión
+      folderNameToken: process.env.SESSION_PATH || './.venom-sessions'
     },
     // Callback QR
     (base64Qr, asciiQR, attempts, urlCode) => {
@@ -35,14 +43,20 @@ function startBot() {
 
 // Lógica de respuestas
 function start(client) {
+  // Registramos las rutas que necesitan venomClient
+  // registerBotpressRoutes espera { app, venomClient }
+  registerBotpressRoutes({ app, venomClient: client });
+
+  // Tu lógica actual de mensajes (puedes ampliarla)
   client.onMessage((message) => {
+    if (!message || !message.body) return;
     if (message.body.toLowerCase() === 'hola') {
       client.sendText(message.from, '👋 Hola! ¿Cómo estás?');
     }
   });
 }
 
-// 🚀 Servidor Express
+// Rutas públicas / UI
 app.get('/', (req, res) => {
   res.send('<h1>Servidor activo 🚀</h1><p>Visita <a href="/qr">/qr</a> para ver el código QR.</p>');
 });
@@ -67,7 +81,7 @@ app.get('/qr', (req, res) => {
   `);
 });
 
-// Railway usa un puerto dinámico
+// Puerto (Railway asume process.env.PORT)
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🌍 Servidor corriendo en http://localhost:${PORT}`);
