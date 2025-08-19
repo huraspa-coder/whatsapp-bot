@@ -35,20 +35,18 @@ venom
   });
 
 // ==========================
-// Endpoint para recibir mensajes de WhatsApp (opcional)
+// Escuchar mensajes entrantes de WhatsApp
 // ==========================
-venom
-  .onMessage((message) => {
-    console.log("📩 Mensaje entrante de WhatsApp a Botpress:", message);
+venom.onMessage((message) => {
+  console.log("📩 Mensaje entrante de WhatsApp a Botpress:", message);
 
-    // cambios: aquí puedes enviar mensaje a Botpress si quieres
-    // ejemplo:
-    // fetch(process.env.BOTPRESS_INCOMING_URL, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({ userId: message.from, text: message.body }),
-    // });
-  });
+  // cambios: si quieres enviar mensaje a Botpress, descomenta y configura URL
+  // fetch(process.env.BOTPRESS_INCOMING_URL, {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify({ userId: message.from, text: message.body }),
+  // });
+});
 
 // ==========================
 // Endpoint POST para recibir mensajes de Botpress
@@ -68,4 +66,14 @@ app.post("/botpress/response", async (req, res) => {
     res.status(200).json({ status: "ok" });
   } catch (error) {
     console.error("❌ Error al enviar mensaje:", error);
-    res
+    res.status(500).json({ error: "Error enviando mensaje" });
+  }
+});
+
+// ==========================
+// Iniciar servidor Express
+// ==========================
+app.listen(PORT, () => {
+  console.log(`🌐 Servidor escuchando en puerto ${PORT}`);
+  console.log(`🌐 Endpoint Botpress: http://localhost:${PORT}/botpress/response`);
+}); // cambios: cierre final correcto para evitar "Unexpected end of input"
