@@ -1,6 +1,7 @@
 const venom = require('venom-bot');
 const fs = require('fs');
 const path = require('path');
+const QRCode = require('qrcode'); // para generar PNG
 
 // Nombre de la sesión
 const sessionName = 'session-name';
@@ -12,68 +13,46 @@ fs.mkdirSync(sessionPath, { recursive: true });
 // Función principal para arrancar el bot
 function startBot() {
   venom.create(
-    sessionName,
-    undefined,
-    undefined,
     {
-      headless: true,
-      useChrome: true,
-      disableSpins: true,
-      logQR: false,
-      puppeteerOptions: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      session: sessionName,
+      multidevice: true
+    },
+    // Callback QR
+    async (base64Qr, asciiQR, attempts, urlCode) => {
+      console.log(asciiQR); // QR en consola
+
+      // Generar archivo QR en PNG
+      const qrPath = path.join(sessionPath, 'qr.png');
+      try {
+        await QRCode.toFile(qrPath, base64Qr.split(',')[1], {
+          type: 'png',
+          width: 300,
+          errorCorrectionLevel: 'H'
+        });
+        console.log(`✅ QR guardado en: ${qrPath}`);
+      } catch (err) {
+        console.error('❌ Error al guardar QR:', err);
       }
+    },
+    // Callback status de sesión
+    (statusSession, session) => {
+      console.log('Status Session:', statusSession);
+      console.log('Session name:', session);
     }
   )
-  .then(client => {
-    console.log('Bot listo y autenticado');
-    // Aquí puedes poner tu lógica del bot
-  })
-  .catch(err => console.error('Error al iniciar el bot:', err));
-}
-
-// Función para generar QR si no hay sesión
-function generateQR() {
-  venom
-    .create(
-      sessionName,
-      undefined,
-      undefined,
-      {
-        headless: true,
-        useChrome: true,
-        logQR: false,
-        disableSpins: true,
-        puppeteerOptions: {
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-        }
-      }
-    )
-    .then(client => start(client))
-    .catch(err => console.error(err));
-
-  venom.onQRCode((base64Qr) => {
-    // Guardar PNG
-    const qrBuffer = Buffer.from(base64Qr, 'base64');
-    fs.writeFileSync(path.join(sessionPath, 'qr.png'), qrBuffer);
-
-    // Guardar HTML
-    const htmlContent = `<img src="data:image/png;base64,${base64Qr}" alt="QR Code">`;
-    fs.writeFileSync(path.join(sessionPath, 'qr.html'), htmlContent);
-
-    console.log('QR generado en PNG y HTML en tokens/' + sessionName);
+  .then((client) => start(client))
+  .catch((erro) => {
+    console.log(erro);
   });
-
-  function start(client) {
-    console.log('Bot listo, escanea el QR para iniciar sesión');
-  }
 }
 
-// Revisar si ya existe la sesión
-if (fs.readdirSync(sessionPath).length > 0) {
-  console.log('Sesión encontrada, arrancando bot headless...');
-  startBot();
-} else {
-  console.log('No se encontró sesión, generando QR...');
-  generateQR();
+// Lógica de respuestas
+function start(client) {
+  client.onMessage((message) => {
+    if (message.body.toLowerCase() === 'hola') {
+      client.sendText(message.from, '👋 Hola! ¿Cómo estás?');
+    }
+  });
 }
+
+startBot();
