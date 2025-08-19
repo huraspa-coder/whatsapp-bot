@@ -15,6 +15,12 @@ let venomClient; // guardamos el cliente Venom para usar en el POST
 // Nombre de la sesión
 const sessionName = 'session-name';
 
+// Función para log unificado
+function logMessage(type, whatsappId, message) {
+  const now = new Date().toISOString();
+  console.log(`[${now}] [${type}] ${whatsappId}: ${message}`);
+}
+
 // Arrancar el bot
 function startBot() {
   venom.create(
@@ -44,6 +50,14 @@ function startBot() {
 // Inicia las rutas y conecta con Botpress
 function start(client) {
   venomClient = client; // guardamos el cliente para el POST
+
+  // Interceptamos todos los mensajes entrantes
+  venomClient.onMessage(async (message) => {
+    if (message.isGroupMsg === false) {
+      logMessage('IN', message.from, message.body);
+    }
+  });
+
   registerBotpressRoutes({ app, venomClient: client });
   console.log('✅ Venom conectado y rutas de Botpress registradas');
 }
@@ -83,7 +97,10 @@ app.post('/botpress/response', async (req, res) => {
 
     const whatsappId = userId.includes('@c.us') ? userId : `${userId}@c.us`;
     await venomClient.sendText(whatsappId, message);
-    console.log(`📤 Mensaje enviado a ${whatsappId}: ${message}`);
+
+    // Logging unificado
+    logMessage('OUT', whatsappId, message);
+
     res.status(200).send('Mensaje enviado');
   } catch (err) {
     console.error('❌ Error enviando mensaje:', err);
