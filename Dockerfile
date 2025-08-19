@@ -1,8 +1,8 @@
-# Imagen base Node.js 20 (bullseye incluye más dependencias que slim)
-FROM node:20-bullseye
+# Imagen base Node.js 20 slim (ligera y suficiente para Puppeteer)
+FROM node:20-slim
 
-# Instalar librerías necesarias para Puppeteer/Chromium
-RUN apt-get update && apt-get install -y \
+# Instalar librerías necesarias para Chromium/Puppeteer
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     fonts-liberation \
@@ -23,22 +23,21 @@ RUN apt-get update && apt-get install -y \
     libpango1.0-0 \
     libglib2.0-0 \
     xdg-utils \
-    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Carpeta de trabajo
 WORKDIR /app
 
-# Copiar package.json y package-lock.json
+# Copiar package.json y package-lock.json primero para aprovechar cache
 COPY package*.json ./
 
-# Instalar dependencias
+# Instalar dependencias (legacy-peer-deps por subdependencias de Venom)
 RUN npm install --legacy-peer-deps && npm cache clean --force
 
 # Copiar el resto del código
 COPY . .
 
-# Crear carpeta de tokens para la sesión
+# Crear carpeta de tokens para la sesión (persistencia opcional)
 RUN mkdir -p /app/tokens/session-name
 
 # Exponer puerto
