@@ -2,74 +2,90 @@
 const express = require('express');
 const axios = require('axios');
 
-module.exports = function initBotpressIntegration({ venomClient }) {
-  const app = express();
-  app.use(express.json());
+function normalizeToJid(raw) {
+  if (!raw) return null;
+  // Si ya parece un JID (contiene @), devuélvelo tal cual
+  if (raw.includes('@')) return raw;
+  // Quita todo lo que no sea dígito o +
+  let digits = ('' + raw).replace(/[^\d+]/g, '');
+  // Quita + si existe
+  digits = digits.replace(/^\+/, '');
+  // Si tiene 8 o 9 dígitos (posible número local Chile), asumimos country code 56
+  if (digits.length === 8 || digits.length === 9) digits = '56' + digits;
+  // Si tiene menos de 8, no intentamos adivinar
+  if (digits.length < 8) return null;
+  return `${digits}@c.us`;
+}
 
-  const BOTPRESS_INCOMING_URL = process.env.BOTPRESS_INCOMING_URL; // webhook de Botpress (create messages)
-  const BOTPRESS_PAT = process.env.BOTPRESS_PAT; // Personal Access Token (Botpress)
-  const BOTPRESS_RESPONSE_SECRET = process.env.BOTPRESS_RESPONSE_SECRET || ''; // opcional, si configuras secret en BP
+module.exports = function registerBotpressRoutes({ app, venomClient }) {
+  if (!app || !venomClient) throw new Error('app and venomClient are required');
 
-  if (!BOTPRESS_INCOMING_URL || !BOTPRESS_PAT) {
-    console.warn('Botpress integration not fully configured (BOTPRESS_INCOMING_URL / BOTPRESS_PAT)');
-  }
+  const router = express.Router();
+  const BOTPRESS_INCOMING_URL = process.env.BOTPRESS_INCOMING_URL;
+  const BOTPRESS_PAT = process.env.BOTPRESS_PAT;
+  const BOTPRESS_RESPONSE_SECRET = process.env.BOTPRESS_RESPONSE_SECRET || '';
 
-  // 1) Endpoint que Botpress usará para enviar respuestas (configurar en la integración)
-  // Botpress enviará payloads con conversationId / userId / message ...
-  app.post('/botpress/response', async (req, res) => {
+  // Endpoint que Botpress usará para enviar respuestas (configurar en Botpress)
+  router.post('/botpress/response', async (req, res) => {
     try {
-      // seguridad simple: valida header o shared secret si lo configuraste
       if (BOTPRESS_RESPONSE_SECRET) {
         const header = req.header('x-bp-secret') || req.query.shared_secret;
         if (header !== BOTPRESS_RESPONSE_SECRET) return res.status(401).send('invalid secret');
       }
 
-      const body = req.body;
-      // Ejemplo: body podría traer { conversationId, type, text, ... }
-      const convId = body.conversationId || (body.user && body.user.id) || body.userId;
-      if (!convId) {
-        console.warn('No conversationId in Botpress payload', body);
-        return res.sendStatus(400);
+      const body = req.body || {};
+      // Botpress puede mandar distintas propiedades; intentamos extraer texto y destinatario
+      const convId = body.conversationId || body.userId || (body.user && body.user.id);
+      const text = body.text || (body.message && body.message.text) || '';
+
+      const to = normalizeToJid(convId);
+      if (!to) return res.status(400).send('invalid conversationId');
+
+      if (text) {
+        await venomClient.sendText(to, text);
+      } else {
+        // Si hay otras acciones (attachments, images), aquí mapealas
+        console.warn('No text provided in Botpress payload', body);
       }
 
-      // Convierte conversationId a formato venombot: normalmente <phone>@c.us
-      // Asumiremos convId es el número completo (ej: 569XXXXXXXX)
-      // Ajusta según tu mapping.
-      const to = convId.includes('@') ? convId : `${convId}@c.us`;
-
-      // Mensajes de texto simples:
-      if (body.text) {
-        await venomClient.sendText(to, body.text);
-      }
-
-      // aquí podrías mapear más tipos: images, buttons, templates, etc.
       return res.sendStatus(200);
     } catch (err) {
-      console.error('Error in /botpress/response', err?.message || err);
+      console.error('Error /botpress/response', err?.message || err);
       return res.status(500).send('error');
     }
   });
 
-  // 2) (Opcional) Endpoint para health / debug
-  app.get('/botpress/health', (req, res) => res.json({ ok: true }));
-
-  // 3) Inicia el server (si tu app ya tiene Express, integra estas rutas en el router existente)
-  const port = process.env.PORT || 8080;
-  app.listen(port, () => {
-    console.log(`Botpress integration endpoints listening on port ${port}`);
+  // Endpoint opcional para pruebas (interno)
+  router.post('/botpress/send', async (req, res) => {
+    try {
+      const { to: rawTo, text } = req.body || {};
+      const to = normalizeToJid(rawTo);
+      if (!to || !text) return res.status(400).send('missing to or text');
+      await venomClient.sendText(to, text);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('Error /botpress/send', err?.message || err);
+      return res.status(500).send('error');
+    }
   });
 
-  // Hook: cuando venom recibe un mensaje, hacemos POST a Botpress (create message)
-  // Este snippet lo puedes agregar donde inicializas venom (index.js)
-  // Ejemplo de payload acorde a la doc de Botpress Chat API / Messaging integration.
+  // Health
+  router.get('/botpress/health', (req, res) => res.json({ ok: true }));
+
+  app.use('/', router);
+
+  // Hook: forward mensajes entrantes de venom a Botpress
   venomClient.onMessage(async (message) => {
     try {
-      // Sólo reenvía mensajes que sean de usuarios (evitar loops con mensajes del propio bot)
+      if (!BOTPRESS_INCOMING_URL || !BOTPRESS_PAT) {
+        console.warn('BOTPRESS_INCOMING_URL / BOTPRESS_PAT not set.');
+        return;
+      }
+      // Evita loops: no reenviar mensajes que provienen del propio bot
       if (message.fromMe) return;
 
-      const userId = message.from.replace('@c.us',''); // ej: "569XXXXXXXX@c.us"
-      const conversationId = userId; // puedes usar el mismo userId como conversationId
-
+      const userId = (message.from || '').replace('@c.us','').replace('@s.whatsapp.net','');
+      const conversationId = userId;
       const payload = {
         userId: userId,
         messageId: message.id || `${Date.now()}-${Math.random()}`,
@@ -89,5 +105,4 @@ module.exports = function initBotpressIntegration({ venomClient }) {
       console.error('Error forwarding message to Botpress', err?.message || err);
     }
   });
-
 };
