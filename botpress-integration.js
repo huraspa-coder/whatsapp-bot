@@ -4,15 +4,10 @@ const axios = require('axios');
 
 function normalizeToJid(raw) {
   if (!raw) return null;
-  // Si ya parece un JID (contiene @), devuélvelo tal cual
   if (raw.includes('@')) return raw;
-  // Quita todo lo que no sea dígito o +
   let digits = ('' + raw).replace(/[^\d+]/g, '');
-  // Quita + si existe
   digits = digits.replace(/^\+/, '');
-  // Si tiene 8 o 9 dígitos (posible número local Chile), asumimos country code 56
   if (digits.length === 8 || digits.length === 9) digits = '56' + digits;
-  // Si tiene menos de 8, no intentamos adivinar
   if (digits.length < 8) return null;
   return `${digits}@c.us`;
 }
@@ -25,26 +20,29 @@ module.exports = function registerBotpressRoutes({ app, venomClient }) {
   const BOTPRESS_PAT = process.env.BOTPRESS_PAT;
   const BOTPRESS_RESPONSE_SECRET = process.env.BOTPRESS_RESPONSE_SECRET || '';
 
-  // Endpoint que Botpress usará para enviar respuestas (configurar en Botpress)
+  // Endpoint que Botpress usará para enviar respuestas de vuelta a WhatsApp
   router.post('/botpress/response', async (req, res) => {
     try {
+      // Cambios: validación de secreto
       if (BOTPRESS_RESPONSE_SECRET) {
         const header = req.header('x-bp-secret') || req.query.shared_secret;
         if (header !== BOTPRESS_RESPONSE_SECRET) return res.status(401).send('invalid secret');
       }
 
       const body = req.body || {};
-      // Botpress puede mandar distintas propiedades; intentamos extraer texto y destinatario
+      // Cambios: soportar conversationId y userId
       const convId = body.conversationId || body.userId || (body.user && body.user.id);
       const text = body.text || (body.message && body.message.text) || '';
 
       const to = normalizeToJid(convId);
       if (!to) return res.status(400).send('invalid conversationId');
 
+      // Esto es nuevo: log para depuración
+      console.log('🔄 Enviando mensaje desde Botpress a WhatsApp:', { to, text });
+
       if (text) {
         await venomClient.sendText(to, text);
       } else {
-        // Si hay otras acciones (attachments, images), aquí mapealas
         console.warn('No text provided in Botpress payload', body);
       }
 
@@ -55,7 +53,7 @@ module.exports = function registerBotpressRoutes({ app, venomClient }) {
     }
   });
 
-  // Endpoint opcional para pruebas (interno)
+  // Endpoint opcional para enviar mensajes manualmente (sin Botpress)
   router.post('/botpress/send', async (req, res) => {
     try {
       const { to: rawTo, text } = req.body || {};
@@ -69,23 +67,24 @@ module.exports = function registerBotpressRoutes({ app, venomClient }) {
     }
   });
 
-  // Health
   router.get('/botpress/health', (req, res) => res.json({ ok: true }));
 
   app.use('/', router);
 
-  // Hook: forward mensajes entrantes de venom a Botpress
+  // Cambios: flujo de mensajes entrantes de Venom a Botpress
   venomClient.onMessage(async (message) => {
     try {
       if (!BOTPRESS_INCOMING_URL || !BOTPRESS_PAT) {
         console.warn('BOTPRESS_INCOMING_URL / BOTPRESS_PAT not set.');
         return;
       }
-      // Evita loops: no reenviar mensajes que provienen del propio bot
+
+      // Evita loops: no reenviar mensajes del propio bot
       if (message.fromMe) return;
 
       const userId = (message.from || '').replace('@c.us','').replace('@s.whatsapp.net','');
       const conversationId = userId;
+
       const payload = {
         userId: userId,
         messageId: message.id || `${Date.now()}-${Math.random()}`,
@@ -94,6 +93,10 @@ module.exports = function registerBotpressRoutes({ app, venomClient }) {
         text: message.body || ''
       };
 
+      // Esto es nuevo: log de depuración de mensaje entrante
+      console.log('📩 Mensaje entrante de WhatsApp a Botpress:', payload);
+
+      // Cambios: espera activa no se hace aquí, Botpress responderá usando /botpress/response
       await axios.post(BOTPRESS_INCOMING_URL, payload, {
         headers: {
           Authorization: `Bearer ${BOTPRESS_PAT}`,
