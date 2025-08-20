@@ -3,78 +3,73 @@ const venom = require('venom-bot');
 const express = require('express');
 const app = express();
 
-// Integración Botpress
+// Importamos la integración con Botpress
 const registerBotpressRoutes = require('./botpress-integration');
 
-app.use(express.json());
+app.use(express.json()); // necesario para endpoints POST
 
-let qrBase64 = null;
+let qrBase64 = null; // Último QR generado
 let attemptsCount = 0;
-let venomClient;
+let venomClient; // Guardamos el cliente Venom para usar en los endpoints
 
-const sessionName = 'session-name';
+const sessionName = 'session-name'; // Nombre de la sesión Venom
 
 function startBot() {
   venom.create(
     {
       session: sessionName,
       multidevice: true,
-      folderNameToken: process.env.SESSION_PATH || './.venom-sessions',
-      headless: true,
-      disableSpins: true,
-      logQR: false
+      folderNameToken: process.env.SESSION_PATH || './.venom-sessions'
     },
     (base64Qr, asciiQR, attempts) => {
+      console.log(asciiQR); 
       qrBase64 = base64Qr;
       attemptsCount = attempts;
-      console.log('QR generado, escanea con WhatsApp si es necesario');
     },
     (statusSession, session) => {
       console.log('Status Session:', statusSession);
+      console.log('Session name:', session);
     }
   )
-  .then(client => initClient(client))
-  .catch(err => console.log('❌ Error Venom:', err));
-}
-
-function initClient(client) {
-  venomClient = client;
-  registerBotpressRoutes({ app, venomClient: client });
-  console.log('✅ Venom conectado y rutas de Botpress registradas');
-
-  // Interceptar todos los mensajes entrantes y salientes
-  venomClient.onMessage(message => {
-    console.log(`📥 Entrante de ${message.from}: ${message.body}`);
+  .then((client) => start(client))
+  .catch((erro) => {
+    console.error('❌ Error Venom:', erro);
   });
 }
 
+function start(client) {
+  venomClient = client;
+  registerBotpressRoutes({ app, venomClient: client });
+  console.log('✅ Venom conectado y rutas de Botpress registradas');
+}
+
+// Rutas de UI / QR
 app.get('/', (req, res) => {
-  res.send('<h1>Servidor activo 🚀</h1><p>Visita <a href="/qr">/qr</a> para ver el QR.</p>');
+  res.send('<h1>Servidor activo 🚀</h1><p>Visita <a href="/qr">/qr</a> para ver el código QR.</p>');
 });
 
 app.get('/qr', (req, res) => {
-  if (!qrBase64) return res.send('<h2>Aún no se ha generado el QR.</h2>');
-  res.send(`<img src="${qrBase64}" alt="QR Code" style="width:300px;height:300px;" /><p>Intento: ${attemptsCount}</p>`);
-});
-
-// Mensajes desde Botpress
-app.post('/botpress/response', async (req, res) => {
-  try {
-    const { userId, message } = req.body;
-    if (!userId || !message) return res.status(400).send('Faltan datos: userId o message');
-    if (!venomClient) return res.status(500).send('Cliente Venom no iniciado');
-
-    const whatsappId = userId.includes('@c.us') ? userId : `${userId}@c.us`;
-    await venomClient.sendText(whatsappId, message);
-    console.log(`📤 Saliente a ${whatsappId}: ${message}`);
-    res.status(200).send('Mensaje enviado');
-  } catch (err) {
-    console.error('❌ Error enviando mensaje:', err);
-    res.status(500).send('Error interno');
+  if (!qrBase64) {
+    return res.send('<h2>Aún no se ha generado el QR... intenta refrescar en unos segundos.</h2>');
   }
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><title>QR WhatsApp</title></head>
+    <body style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;font-family:sans-serif;">
+      <h2>Escanea este QR para iniciar sesión en WhatsApp</h2>
+      <img src="${qrBase64}" alt="QR Code" style="width:300px;height:300px;" />
+      <p>Intento: ${attemptsCount}</p>
+    </body>
+    </html>
+  `);
 });
 
+// Puerto Railway o local
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌍 Servidor corriendo en http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🌍 Servidor corriendo en http://localhost:${PORT}`);
+});
 
+// Iniciar el bot
 startBot();
