@@ -33,8 +33,8 @@ WORKDIR /app
 # Copiar package.json y package-lock.json primero
 COPY package*.json ./
 
-# Instalar dependencias (evita conflictos peer deps de Venom)
-RUN npm install --legacy-peer-deps && npm cache clean --force
+# Instalar dependencias
+RUN npm install && npm cache clean --force
 
 # Copiar el resto del código
 COPY . .
@@ -45,5 +45,5 @@ RUN mkdir -p /app/tokens/session-name
 # Exponer puerto
 EXPOSE 3000
 
-# Arrancar el bot
-CMD ["npm", "start"]
+# Comando para arrancar el bot
+CMD ["node", "index.js"]
