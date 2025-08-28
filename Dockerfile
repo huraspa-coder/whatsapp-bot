@@ -32,7 +32,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Instalar dependencias (legacy-peer-deps por subdependencias de Venom)
-RUN npm install --legacy-peer-deps && npm cache clean --force
+RUN npm ci --legacy-peer-deps && npm cache clean --force
+
 
 # Copiar el resto del código
 COPY . .
