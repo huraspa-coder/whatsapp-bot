@@ -4,14 +4,14 @@ import jwt from 'jsonwebtoken';
 
 const CHAT_BASE = process.env.BOTPRESS_CHAT_BASE || 'https://chat.botpress.cloud';
 const WEBHOOK_ID = process.env.BOTPRESS_WEBHOOK_ID; // p.ej. bf9295f7-...
-const ENCRYPTION_KEY = process.env.BOTPRESS_CHAT_ENCRYPTION_KEY;
+const ENCRYPTION_KEY = process.env.BOTPRESS_CHAT_ENCRYPTION;
 
 // En memoria para pruebas (prod: persistir)
 const conversationByUser = new Map();
 
 function makeUserKey(userId) {
   if (!ENCRYPTION_KEY) {
-    throw new Error('Falta BOTPRESS_CHAT_ENCRYPTION_KEY para auth manual');
+    throw new Error('Falta BOTPRESS_CHAT_ENCRYPTION para auth manual');
   }
   // JWT HS256 => x-user-key
   return jwt.sign({ id: userId }, ENCRYPTION_KEY, { algorithm: 'HS256' });
