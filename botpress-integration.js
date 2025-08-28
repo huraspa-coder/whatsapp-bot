@@ -1,53 +1,73 @@
-// src/botpress-integration.js
-import axios from 'axios';
-import jwt from 'jsonwebtoken';
+// botpress-integration.js
+const express = require('express');
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
 
-const CHAT_BASE = process.env.BOTPRESS_CHAT_BASE || 'https://chat.botpress.cloud';
-const WEBHOOK_ID = process.env.BOTPRESS_WEBHOOK_ID; // p.ej. bf9295f7-...
-const ENCRYPTION_KEY = process.env.BOTPRESS_CHAT_ENCRYPTION;
-
-// En memoria para pruebas (prod: persistir)
-const conversationByUser = new Map();
-
-function makeUserKey(userId) {
-  if (!ENCRYPTION_KEY) {
-    throw new Error('Falta BOTPRESS_CHAT_ENCRYPTION para auth manual');
-  }
-  // JWT HS256 => x-user-key
-  return jwt.sign({ id: userId }, ENCRYPTION_KEY, { algorithm: 'HS256' });
+function normalizeToJid(raw) {
+  if (!raw) return null;
+  if (String(raw).includes('@')) return String(raw);
+  let digits = String(raw).replace(/[^\d+]/g, '').replace(/^\+/, '');
+  if (digits.length === 8 || digits.length === 9) digits = '56' + digits;
+  if (digits.length < 8) return null;
+  return `${digits}@c.us`;
 }
 
-async function ensureConversation(userId) {
-  if (conversationByUser.has(userId)) return conversationByUser.get(userId);
-
-  const xUserKey = makeUserKey(userId);
-  const url = `${CHAT_BASE}/${WEBHOOK_ID}/conversations`;
-
-  const { data } = await axios.post(
-    url,
-    {}, // sin body => id autogenerado
-    { headers: { 'Content-Type': 'application/json', 'x-user-key': xUserKey } }
-  );
-
-  const convId = data?.conversation?.id;
-  if (!convId) throw new Error('No llegó conversation.id desde Botpress');
-  conversationByUser.set(userId, convId);
-  return convId;
+function createUserJWT(userId) {
+  const secret = process.env.BOTPRESS_CHAT_ENCRYPTION_KEY;
+  if (!secret) throw new Error('BOTPRESS_CHAT_ENCRYPTION_KEY not set');
+  return jwt.sign({ id: String(userId) }, secret, { algorithm: 'HS256', expiresIn: '1h' });
 }
 
-export async function sendTextToBotpress({ userId, text }) {
-  const xUserKey = makeUserKey(userId);
-  const conversationId = await ensureConversation(userId);
+module.exports = function registerBotpressRoutes({ app, venomClient }) {
+  if (!app || !venomClient) throw new Error('app and venomClient are required');
 
-  const url = `${CHAT_BASE}/${WEBHOOK_ID}/messages`;
-  const payload = {
-    conversationId,
-    payload: { type: 'text', text }
-  };
+  const router = express.Router();
+  const CHAT_API_URL = process.env.BOTPRESS_CHAT_API_URL; // https://chat.botpress.cloud/<BOT_ID>
 
-  const { data } = await axios.post(url, payload, {
-    headers: { 'Content-Type': 'application/json', 'x-user-key': xUserKey }
+  // Recibir mensajes desde WhatsApp y mandarlos a Botpress Chat API
+  venomClient.onMessage(async (message) => {
+    try {
+      if (!CHAT_API_URL) {
+        console.warn('BOTPRESS_CHAT_API_URL not set.');
+        return;
+      }
+      if (message.fromMe) return;
+
+      const userId = String(message.from || '').replace('@c.us', '').replace('@s.whatsapp.net', '');
+      const jwtToken = createUserJWT(userId);
+
+      const payload = {
+        type: 'text',
+        text: message.body || ''
+      };
+
+      await axios.post(`${CHAT_API_URL}/conversations/${userId}/messages`, payload, {
+        headers: {
+          'x-user-key': jwtToken,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (err) {
+      console.error('Error sending message to Botpress Chat API', err?.response?.status, err?.response?.data || err?.message);
+    }
   });
 
-  return data;
-}
+  // Endpoint para pruebas: enviar un mensaje desde el servidor a WhatsApp
+  router.post('/botpress/send', async (req, res) => {
+    try {
+      const { to: rawTo, text } = req.body || {};
+      const to = normalizeToJid(rawTo);
+      if (!to || !text) return res.status(400).send('missing to or text');
+      await venomClient.sendText(to, text);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error('Error /botpress/send', err?.message || err);
+      return res.status(500).send('error');
+    }
+  });
+
+  // TODO: aquí podemos añadir polling o event stream de Botpress para escuchar respuestas
+  // y reenviarlas a WhatsApp automáticamente.
+
+  app.use('/', router);
+};
