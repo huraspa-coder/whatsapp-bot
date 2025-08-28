@@ -13,8 +13,8 @@ function normalizeToJid(raw) {
 }
 
 function createUserJWT(userId) {
-  const secret = process.env.BOTPRESS_CHAT_ENCRYPTION_KEY;
-  if (!secret) throw new Error('BOTPRESS_CHAT_ENCRYPTION_KEY not set');
+  const secret = process.env.BOTPRESS_CHAT_ENCRYPTION;
+  if (!secret) throw new Error('BOTPRESS_CHAT_ENCRYPTION not set');
   return jwt.sign({ id: String(userId) }, secret, { algorithm: 'HS256', expiresIn: '1h' });
 }
 
