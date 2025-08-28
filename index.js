@@ -1,84 +1,59 @@
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import { create, Whatsapp } from 'venom-bot';
-import { sendTextToBotpress } from './botpress-integration.js';
-
+// index.js
+const venom = require('venom-bot');
+const express = require('express');
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 3000;
-const WEBHOOK_SECRET = process.env.BOTPRESS_RESPONSE_SECRET;
+const registerBotpressRoutes = require('./botpress-integration');
 
-let venomClient = null;
+app.use(express.json());
 
-function normalizeToJid(phone) {
-  const digits = (phone || '').replace(/\D/g, '');
-  return `${digits}@c.us`; // <-- backticks correctos
+let qrBase64 = null;
+let attemptsCount = 0;
+const sessionName = 'session-name';
+
+function startBot() {
+  venom.create(
+    {
+      session: sessionName,
+      multidevice: true,
+      folderNameToken: process.env.SESSION_PATH || './.venom-sessions'
+    },
+    (base64Qr, asciiQR, attempts) => {
+      console.log(asciiQR);
+      qrBase64 = base64Qr;
+      attemptsCount = attempts;
+    },
+    (statusSession, session) => {
+      console.log('Status Session:', statusSession);
+      console.log('Session name:', session);
+    }
+  )
+  .then((client) => start(client))
+  .catch((erro) => {
+    console.log('❌ Error Venom:', erro);
+  });
 }
 
-// Salud
-app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+function start(client) {
+  registerBotpressRoutes({ app, venomClient: client });
 
-// Endpoint que Botpress (Chat API) llamará con tu Webhook URL
-app.post('/botpress/response', async (req, res) => {
-  try {
-    const secret = req.header('x-bp-secret');
-    if (!secret || secret !== WEBHOOK_SECRET) {
-      return res.status(401).json({ error: 'invalid webhook secret' });
+  client.onMessage((message) => {
+    if (message.body?.toLowerCase() === 'ping') {
+      client.sendText(message.from, 'pong ✅');
     }
+  });
+}
 
-    // Estructura de evento del Chat API: usa defensive parsing
-    const event = req.body?.event || req.body;
-    const userId =
-      event?.userId || req.body?.user?.id || req.body?.message?.userId;
-
-    const text =
-      req.body?.message?.payload?.text ||
-      req.body?.event?.payload?.text ||
-      req.body?.payload?.text;
-
-    if (!userId || !text) {
-      console.warn('Webhook sin userId o text', req.body);
-      return res.status(204).end();
-    }
-
-    const to = normalizeToJid(userId);
-    await venomClient?.sendText(to, text);
-    res.json({ delivered: true });
-  } catch (err) {
-    console.error('Error en /botpress/response', err?.response?.data || err);
-    res.status(500).json({ error: 'fail' });
+app.get('/qr', (req, res) => {
+  if (!qrBase64) {
+    return res.send('<h2>Aún no se ha generado el QR.</h2>');
   }
+  res.send(`<img src="${qrBase64}" alt="QR Code" />`);
 });
 
-async function startVenom() {
-  venomClient = await create({
-    session: 'session-name',
-    folderNameToken: process.env.SESSION_PATH || './.venom-sessions',
-    headless: true
-  });
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌍 Servidor corriendo en http://localhost:${PORT}`);
+});
 
-  // Cuando llegue un mensaje de WhatsApp => reenviar a Botpress (Chat API)
-  venomClient.onMessage(async (message) => {
-    try {
-      // Evitar eco de tus propios mensajes
-      if (message.fromMe) return;
-
-      const userId = message.from.replace('@c.us', '');
-      const text = message.body || '';
-
-      await sendTextToBotpress({ userId, text });
-    } catch (err) {
-      console.error('Error forwarding message to Botpress', err?.response?.data || err);
-    }
-  });
-}
-
-startVenom()
-  .then(() => app.listen(PORT, () => console.log(`🌍 Servidor escuchando en :${PORT}`)))
-  .catch((e) => {
-    console.error('Fallo al iniciar Venom', e);
-    process.exit(1);
-  });
+startBot();
