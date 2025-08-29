@@ -1,42 +1,42 @@
-FROM node:20-bookworm-slim
+# Base Node
+FROM node:20-slim
 
-# Instalar dependencias mínimas para Chromium
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Instalar dependencias de Puppeteer/Chromium
+RUN apt-get update && apt-get install -y \
     chromium \
-    libatk-bridge2.0-0 \
+    chromium-driver \
+    libnss3 \
     libatk1.0-0 \
+    libxss1 \
+    libgtk-3-0 \
     libx11-xcb1 \
     libxcomposite1 \
+    libxcursor1 \
     libxdamage1 \
-    libxext6 \
-    libxfixes3 \
     libxrandr2 \
-    libgbm1 \
-    libgtk-3-0 \
     libasound2 \
-    libnss3 \
+    libpangocairo-1.0-0 \
+    libpango-1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgdk-pixbuf2.0-0 \
     libxshmfence1 \
-    fonts-liberation \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# Definir Puppeteer para que use Chromium del sistema
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-
-# Crear directorio de trabajo
-WORKDIR /usr/src/app
-
-# Copiar dependencias primero (cache docker)
+# Instalar dependencias Node
+WORKDIR /app
 COPY package*.json ./
-
-# Instalar dependencias node
-RUN npm install --legacy-peer-deps && npm cache clean --force
+RUN npm install --legacy-peer-deps
 
 # Copiar proyecto
 COPY . .
 
-# Exponer puerto
-EXPOSE 3000
+# Variables de entorno para Venom
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV SESSION_PATH=/app/.venom-sessions
 
-# Ejecutar servidor
+EXPOSE 3000
 CMD ["node", "server.js"]
