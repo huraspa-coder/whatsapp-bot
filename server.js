@@ -7,11 +7,30 @@ app.use(bodyParser.json());
 
 let client; // Cliente de Venom
 
+// Forzar Puppeteer a usar Chromium en el contenedor
+process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium';
+
 // Iniciar sesión de WhatsApp
-venom.create().then((c) => {
+venom.create({
+  session: 'session-name',
+  headless: true,          // obligatorio en servidores
+  useChrome: false,        // usar Chromium en vez de Chrome
+  puppeteerArgs: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-extensions',
+    '--disable-gpu',
+    '--window-size=1920,1080'
+  ]
+})
+.then((c) => {
   client = c;
   console.log('WhatsApp session ready');
-}).catch(console.error);
+})
+.catch((err) => {
+  console.error('Error al iniciar sesión de WhatsApp:', err);
+});
 
 // Endpoint para ver estado de la sesión
 app.get('/status', (req, res) => {
