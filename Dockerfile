@@ -1,47 +1,42 @@
-# Imagen base Node.js 20 slim (ligera y suficiente para Puppeteer)
-FROM node:20-slim
+FROM node:20-bookworm-slim
 
-# Instalar librerías necesarias para Chromium/Puppeteer
+# Instalar dependencias mínimas para Chromium
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    ca-certificates \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
+    chromium \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libgdk-pixbuf-2.0-0 \
-    libnspr4 \
-    libnss3 \
     libx11-xcb1 \
     libxcomposite1 \
     libxdamage1 \
+    libxext6 \
+    libxfixes3 \
     libxrandr2 \
     libgbm1 \
-    libpango1.0-0 \
-    libglib2.0-0 \
-    xdg-utils \
+    libgtk-3-0 \
+    libasound2 \
+    libnss3 \
+    libxshmfence1 \
+    fonts-liberation \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Carpeta de trabajo
-WORKDIR /app
+# Definir Puppeteer para que use Chromium del sistema
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Copiar package.json y package-lock.json primero para aprovechar cache
+# Crear directorio de trabajo
+WORKDIR /usr/src/app
+
+# Copiar dependencias primero (cache docker)
 COPY package*.json ./
 
-# Instalar dependencias (legacy-peer-deps por subdependencias de Venom)
-RUN npm install --legacy-peer-deps && npm cache clean --force
+# Instalar dependencias node
+RUN npm ci --legacy-peer-deps && npm cache clean --force
 
-# Copiar el resto del código
+# Copiar proyecto
 COPY . .
-
-# Crear carpeta de tokens para la sesión (persistencia opcional)
-RUN mkdir -p /app/tokens/session-name
 
 # Exponer puerto
 EXPOSE 3000
 
-# Comando para arrancar el bot
-CMD ["npm", "start"]
+# Ejecutar servidor
+CMD ["node", "server.js"]
