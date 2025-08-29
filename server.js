@@ -5,16 +5,13 @@ const venom = require('venom-bot');
 const app = express();
 app.use(bodyParser.json());
 
-let client; // Cliente de Venom
+let client;
 
-// Forzar Puppeteer a usar Chromium en el contenedor
-process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium';
-
-// Iniciar sesión de WhatsApp
-venom.create({
+// Configurar Puppeteer para Venom en Railway
+const venomOptions = {
   session: 'session-name',
-  headless: true,          // obligatorio en servidores
-  useChrome: false,        // usar Chromium en vez de Chrome
+  headless: true,           // obligatorio en servidores
+  useChrome: false,         // usa Chromium de Puppeteer
   puppeteerArgs: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -22,15 +19,21 @@ venom.create({
     '--disable-extensions',
     '--disable-gpu',
     '--window-size=1920,1080'
-  ]
-})
-.then((c) => {
-  client = c;
-  console.log('WhatsApp session ready');
-})
-.catch((err) => {
-  console.error('Error al iniciar sesión de WhatsApp:', err);
-});
+  ],
+  multidevice: false,       // evita abrir QR cada vez
+  sessionPath: process.env.SESSION_PATH, // ruta persistente en la nube
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
+};
+
+// Iniciar sesión de WhatsApp
+venom.create(venomOptions)
+  .then((c) => {
+    client = c;
+    console.log('WhatsApp session ready');
+  })
+  .catch((err) => {
+    console.error('❌ Error Venom:', err.message);
+  });
 
 // Endpoint para ver estado de la sesión
 app.get('/status', (req, res) => {
@@ -53,7 +56,7 @@ app.post('/sendMessage', async (req, res) => {
   }
 });
 
-// Endpoint webhook para recibir mensajes
+// Endpoint para recibir mensajes (webhook)
 app.post('/webhook', (req, res) => {
   console.log('Mensaje recibido:', req.body);
   res.sendStatus(200);
