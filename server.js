@@ -1,39 +1,38 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const venom = require('venom-bot');
+const path = require('path');
 
 const app = express();
 app.use(bodyParser.json());
 
-let client;
+let client; // Cliente de Venom
 
-// Configurar Puppeteer para Venom en Railway
-const venomOptions = {
-  session: 'session-name',
-  headless: true,           // obligatorio en servidores
-  useChrome: false,         // usa Chromium de Puppeteer
-  puppeteerArgs: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-extensions',
-    '--disable-gpu',
-    '--window-size=1920,1080'
-  ],
-  multidevice: false,       // evita abrir QR cada vez
-  sessionPath: process.env.SESSION_PATH, // ruta persistente en la nube
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH
-};
+// Asegurar path de sesión
+const SESSION_PATH = process.env.SESSION_PATH || path.join(__dirname, '.venom-sessions');
 
-// Iniciar sesión de WhatsApp
-venom.create(venomOptions)
+// Iniciar sesión de WhatsApp con Puppeteer y Chromium
+venom
+  .create({
+    session: 'session-name',
+    headless: true,           // obligatorio en servidores
+    useChrome: false,         // usa Chromium de Puppeteer
+    sessionPath: SESSION_PATH,
+    puppeteerArgs: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-extensions',
+      '--disable-gpu',
+      '--window-size=1920,1080'
+    ],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium'
+  })
   .then((c) => {
     client = c;
     console.log('WhatsApp session ready');
   })
-  .catch((err) => {
-    console.error('❌ Error Venom:', err.message);
-  });
+  .catch(console.error);
 
 // Endpoint para ver estado de la sesión
 app.get('/status', (req, res) => {
@@ -56,7 +55,7 @@ app.post('/sendMessage', async (req, res) => {
   }
 });
 
-// Endpoint para recibir mensajes (webhook)
+// Endpoint webhook para recibir mensajes
 app.post('/webhook', (req, res) => {
   console.log('Mensaje recibido:', req.body);
   res.sendStatus(200);
