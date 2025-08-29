@@ -30,7 +30,7 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Instalar dependencias node
-RUN npm ci --legacy-peer-deps && npm cache clean --force
+RUN npm install --legacy-peer-deps && npm cache clean --force
 
 # Copiar proyecto
 COPY . .
