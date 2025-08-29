@@ -10,6 +10,7 @@
   "axios": "^1.7.7",
   "express": "^4.21.1",
   "venom-bot": "^5.1.0",
+  "body-parser": "^1.20.2",
   "jsonwebtoken": "^9.0.2"
 },
   "resolutions": {
