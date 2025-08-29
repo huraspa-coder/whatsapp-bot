@@ -1,51 +1,64 @@
-# Dockerfile para Venom Bot en Railway con Node 20
+# 1. Base image Node 20
+FROM node:20-slim
 
-# 1. Imagen base oficial Node 20 LTS
-FROM node:20-bullseye-slim
-
-# 2. Variables de entorno necesarias para Puppeteer
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV SESSION_PATH=/app/.venom-sessions
-ENV PORT=3000
-
-# 3. Instalar dependencias del sistema necesarias para Chromium y Puppeteer
+# 2. Instalar dependencias necesarias para Chromium y Venom
 RUN apt-get update && apt-get install -y \
     chromium \
+    wget \
+    ca-certificates \
     fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
+    libc6 \
+    libcairo2 \
     libcups2 \
     libdbus-1-3 \
-    libdrm2 \
+    libexpat1 \
+    libfontconfig1 \
     libgbm1 \
+    libglib2.0-0 \
     libgtk-3-0 \
     libnspr4 \
     libnss3 \
+    libx11-6 \
     libx11-xcb1 \
+    libxcb1 \
     libxcomposite1 \
+    libxcursor1 \
     libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
     libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    lsb-release \
     xdg-utils \
-    --no-install-recommends \
- && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
-# 4. Crear directorio de trabajo
+# 3. Establecer directorio de trabajo
 WORKDIR /app
 
-# 5. Copiar package.json y package-lock.json (si existe)
+# 4. Copiar package.json y package-lock.json / install dependencies
 COPY package*.json ./
-
-# 6. Instalar dependencias Node
 RUN npm install --legacy-peer-deps
 
-# 7. Copiar todo el proyecto
+# 5. Copiar todo el proyecto
 COPY . .
 
-# 8. Crear carpeta de sesiones
-RUN mkdir -p $SESSION_PATH
+# 6. Variables de entorno recomendadas
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV SESSION_PATH=/app/.venom-sessions
+ENV NODE_ENV=production
 
-# 9. Exponer el puerto
+# 7. Crear carpeta de sesiones con permisos
+RUN mkdir -p $SESSION_PATH && chmod -R 777 $SESSION_PATH
+
+# 8. Exponer puerto
 EXPOSE 3000
 
-# 10. Comando por defecto para correr tu server.js
+# 9. Iniciar el server
 CMD ["node", "server.js"]
